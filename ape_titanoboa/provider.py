@@ -17,7 +17,7 @@ from ape.exceptions import (
 )
 from ape_ethereum.transactions import TransactionStatusEnum
 from eth.constants import ZERO_ADDRESS
-from eth.exceptions import Revert
+from eth.exceptions import BlockNotFound, Revert
 from eth.vm.spoof import SpoofTransaction
 from eth_abi import decode
 from eth_pydantic_types import HexBytes, HexStr
@@ -415,9 +415,14 @@ class BaseTitanoboaProvider(TestProviderAPI, ABC):
 
     def get_contract_logs(self, log_filter: "LogFilter") -> Iterator["ContractLog"]:
         start_block = log_filter.start_block or 0
-        stop_block = log_filter.stop_block or self.get_block("latest").number or 0
+        stop_block = log_filter.stop_block or self.get_block("latest").number or max(0, start_block)
         for block_number in range(start_block, stop_block + 1):
-            block = self.get_block(block_number)
+            try:
+                block = self.get_block(block_number)
+            except BlockNotFoundError:
+                # End the loop once we reached the end of the valid block range.
+                return
+
             for transaction in block.transactions:
                 if transaction.receiver not in log_filter.addresses:
                     continue
